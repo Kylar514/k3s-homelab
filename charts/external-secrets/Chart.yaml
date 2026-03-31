@@ -1,0 +1,8 @@
+apiVersion: v2
+name: external-secrets
+description: External Secrets Operator - sync secrets from Vault to Kubernetes
+version: 0.1.0
+dependencies:
+  - name: external-secrets
+    version: 2.2.0
+    repository: https://charts.external-secrets.io
