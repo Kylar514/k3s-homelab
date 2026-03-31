@@ -3,3 +3,5 @@ external-secrets:
   crds:
     create: true
     keep: true
+vault:
+  roleId: '0ffd4396-153e-d834-53dc-becd765bebe2'
