@@ -1,0 +1,4 @@
+apiVersion: v2
+name: argocd-ingress
+description: Traefik IngressRoute for ArgoCD
+version: 0.1.0
