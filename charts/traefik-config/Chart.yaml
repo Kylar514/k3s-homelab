@@ -1,0 +1,4 @@
+apiVersion: v2
+name: traefik-config
+description: Traefik configuration for k3s - ACME, Let's Encrypt, and ingress routes
+version: 0.1.0
