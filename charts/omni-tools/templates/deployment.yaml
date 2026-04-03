@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni
+  namespace: tools
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omni
+  template:
+    metadata:
+      labels:
+        app: omni
+    spec:
+      containers:
+        - name: omni
+          image: corentinth/omni:2024.10.22-7ca5933
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi

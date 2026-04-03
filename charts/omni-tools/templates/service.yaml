@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: omni
+  namespace: tools
+spec:
+  selector:
+    app: omni
+  ports:
+    - port: 80
+      targetPort: 80

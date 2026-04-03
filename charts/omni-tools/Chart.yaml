@@ -1,0 +1,4 @@
+apiVersion: v2
+name: omni
+description: Collection of handy online utilities for editing images, text, lists, and data.
+version: 0.1.0
