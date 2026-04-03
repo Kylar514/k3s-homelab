@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: omni
-          image: corentinth/omni:2024.10.22-7ca5933
+          image: iib0011/omni:0.6.0
           ports:
             - containerPort: 80
           resources:
