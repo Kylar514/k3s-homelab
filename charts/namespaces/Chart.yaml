@@ -1,0 +1,4 @@
+apiVersion: v2
+name: namespaces
+description: Cluster namespace definitions - apply before all other charts
+version: 0.1.0
