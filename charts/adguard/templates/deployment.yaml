@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguardhome-sync
+  namespace: infra
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: adguardhome-sync
+  template:
+    metadata:
+      labels:
+        app: adguardhome-sync
+    spec:
+      containers:
+        - name: adguardhome-sync
+          image: ghcr.io/bakito/adguardhome-sync:latest
+          env:
+            # PHASE 1: nasus is origin (source of truth), K8s is replica
+            - name: ORIGIN_URL
+              value: 'http://10.0.40.3:85'
+            - name: ORIGIN_USERNAME
+              value: 'admin'
+            - name: ORIGIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: adguardhome-sync-credentials
+                  key: origin-password
+
+            # Replica = K8s AdGuard, accessed via ClusterIP service
+            - name: REPLICA1_URL
+              value: 'http://10.0.40.4:85'
+            - name: REPLICA1_USERNAME
+              value: 'admin'
+            - name: REPLICA1_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: adguardhome-sync-credentials
+                  key: replica-password
+
+            # Sync every 5 minutes
+            - name: CRON
+              value: '*/5 * * * *'
+            - name: RUN_ON_START
+              value: 'true'
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
