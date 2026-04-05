@@ -6,10 +6,19 @@ its file here.
 
 ---
 
+## Prerequisites
+
+Traefik must have `allowExternalNameServices: true` set in its config. This is
+already configured in `traefik-config` chart via `HelmChartConfig`. Without it,
+ExternalName services will return 404.
+
+---
+
 ## Pattern
 
-Each file in `templates/` is fully self-contained — Service + EndpointSlice +
-IngressRoute for one external service. Nothing is split across files.
+Each file in `templates/` is fully self-contained — Service + IngressRoute for
+one external service. Uses Kubernetes `ExternalName` service type which Traefik
+resolves directly to the external IP. No EndpointSlice or Endpoints needed.
 
 ### Basic Template
 
@@ -18,29 +27,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: my-service
-  namespace: infra # or whichever namespace makes sense
+  namespace: infra
 spec:
-  clusterIP: None
+  type: ExternalName
+  externalName: 10.0.40.x # IP of the external host
   ports:
     - name: http
       port: 80
       targetPort: 80
----
-apiVersion: discovery.k8s.io/v1
-kind: EndpointSlice
-metadata:
-  name: my-service
-  namespace: infra
-  labels:
-    kubernetes.io/service-name: my-service # must match Service name exactly
-addressType: IPv4
-ports:
-  - name: http
-    protocol: TCP
-    port: 80
-endpoints:
-  - addresses:
-      - 10.0.40.x # IP of the external host
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -60,33 +54,46 @@ spec:
     certResolver: letsencrypt
 ```
 
-> **Why EndpointSlice and not Endpoints?** ArgoCD excludes `Endpoints` resources
-> globally by default. `EndpointSlice` is the modern replacement and ArgoCD
-> manages it without issue.
+> **Why ExternalName?** ExternalName services route directly to an external IP
+> without needing Endpoints or EndpointSlice objects. ArgoCD excludes both
+> Endpoints and EndpointSlice by default, making ExternalName the correct
+> GitOps-friendly pattern for external services. Requires
+> `allowExternalNameServices: true` in Traefik config.
 
 ---
 
 ## Special Cases
 
-Some services require Traefik middleware for headers, websockets, or other
-passthrough config. Define the Middleware in the same file, then reference it in
-the IngressRoute.
+Some services require Traefik middleware for headers, websockets, or TLS
+passthrough. Define the Middleware in the same file, then reference it in the
+IngressRoute.
 
 ### Proxmox
 
-Proxmox requires skipping TLS verification (self-signed cert) and passing
-specific headers.
+Proxmox uses a self-signed cert and requires TLS verification to be skipped.
 
 ```yaml
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
+apiVersion: v1
+kind: Service
 metadata:
-  name: proxmox-headers
+  name: proxmox
   namespace: infra
 spec:
-  headers:
-    customRequestHeaders:
-      X-Forwarded-Proto: 'https'
+  type: ExternalName
+  externalName: 10.0.40.x
+  ports:
+    - name: https
+      port: 8006
+      targetPort: 8006
+---
+# Required to skip TLS verification for Proxmox's self-signed cert
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: proxmox-transport
+  namespace: infra
+spec:
+  insecureSkipVerify: true
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -99,28 +106,18 @@ spec:
   routes:
     - match: Host(`proxmox.thenasus.com`)
       kind: Rule
-      middlewares:
-        - name: proxmox-headers
       services:
         - name: proxmox
           port: 8006
-          serversTransport: proxmox-transport # see ServersTransport below
+          serversTransport: proxmox-transport
   tls:
     certResolver: letsencrypt
----
-# Required to skip TLS verification for Proxmox's self-signed cert
-apiVersion: traefik.io/v1alpha1
-kind: ServersTransport
-metadata:
-  name: proxmox-transport
-  namespace: infra
-spec:
-  insecureSkipVerify: true
 ```
 
 ### Jellyfin
 
-Jellyfin requires websocket passthrough for streaming to work correctly.
+Jellyfin requires websocket passthrough and specific headers for streaming to
+work.
 
 ```yaml
 apiVersion: traefik.io/v1alpha1
@@ -133,6 +130,19 @@ spec:
     customRequestHeaders:
       X-Forwarded-Proto: 'https'
       X-Real-IP: ''
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: infra
+spec:
+  type: ExternalName
+  externalName: 10.0.40.x
+  ports:
+    - name: http
+      port: 8096
+      targetPort: 8096
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
@@ -167,17 +177,8 @@ metadata:
   namespace: infra
 spec:
   basicAuth:
-    secret: my-service-basicauth # K8s Secret with htpasswd format
+    secret: my-service-basicauth # K8s Secret with htpasswd encoded credentials
 ```
-
----
-
-## Current External Services
-
-| File                     | Domain                | Host              | Port | Notes                        |
-| ------------------------ | --------------------- | ----------------- | ---- | ---------------------------- |
-| `adguard-primary.yaml`   | adguard.thenasus.com  | nasus `10.0.40.3` | 85   | Primary DNS, origin for sync |
-| `adguard-secondary.yaml` | adguard2.thenasus.com | Pi (TBD)          | 80   | Secondary DNS, replica       |
 
 ---
 
