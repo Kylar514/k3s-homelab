@@ -13,6 +13,11 @@ spec:
       - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
       - "--entrypoints.websecure.http.tls.domains[0].main=thenasus.com"
       - "--entrypoints.websecure.http.tls.domains[0].sans=*.thenasus.com"
+    providers:
+      kubernetesCRD:
+        allowExternalNameServices: true
+      kubernetesIngress:
+        allowExternalNameServices: true
     env:
       - name: CF_DNS_API_TOKEN
         valueFrom:
