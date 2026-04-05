@@ -1,4 +1,4 @@
 apiVersion: v2
-name: adguard
-description: adguard home ingress routes for primary and secondary.  Adguardhome Sync ensures both instances of adguard home are in the same state
+name: adguardhome-sync
+description: Adguardhome Sync ensures both instances of adguard home are in the same state
 version: 0.1.0
