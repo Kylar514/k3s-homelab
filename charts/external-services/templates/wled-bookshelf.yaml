@@ -15,7 +15,7 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: adguard-primary
+  name: wled-bookshelf
   namespace: infra
 spec:
   entryPoints:
