@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hindsight
+  namespace: apps
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hindsight
+  template:
+    metadata:
+      labels:
+        app: hindsight
+    spec:
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: hindsight
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: api
+              containerPort: 8888
+            - name: ui
+              containerPort: 9999
+          envFrom:
+            - secretRef:
+                name: hindsight
+          env:
+            - name: HINDSIGHT_API_LLM_PROVIDER
+              value: {{ .Values.llm.provider | quote }}
+            - name: HINDSIGHT_API_LLM_MODEL
+              value: {{ .Values.llm.model | quote }}
+            - name: HINDSIGHT_API_LLM_BASE_URL
+              value: {{ .Values.llm.baseUrl | quote }}
+            - name: HINDSIGHT_API_WORKER_ID
+              value: hindsight
+            - name: HINDSIGHT_CP_DATAPLANE_API_URL
+              value: http://localhost:8888
+          startupProbe:
+            httpGet:
+              path: /health
+              port: api
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: api
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: api
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /home/hindsight/.pg0
+            - name: shared-memory
+              mountPath: /dev/shm
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hindsight-data
+        - name: shared-memory
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi

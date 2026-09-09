@@ -1,0 +1,33 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hindsight
+  namespace: apps
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`hindsight.thenasus.com`)
+      kind: Rule
+      services:
+        - name: hindsight
+          port: 9999
+  tls:
+    certResolver: letsencrypt
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: hindsight-api
+  namespace: apps
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`api.hindsight.thenasus.com`)
+      kind: Rule
+      services:
+        - name: hindsight
+          port: 8888
+  tls:
+    certResolver: letsencrypt
