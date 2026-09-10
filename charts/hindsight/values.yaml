@@ -4,9 +4,8 @@ image:
   pullPolicy: IfNotPresent
 
 llm:
-  provider: opencode-go
-  model: deepseek-v4-flash
-  baseUrl: https://opencode.ai/zen/go/v1
+  provider: groq
+  model: openai/gpt-oss-20b
 
 storage:
   storageClass: nfs-fast
@@ -22,4 +21,4 @@ resources:
 
 externalSecret:
   key: secret/hindsight
-  property: opencode-api-key
+  property: groq-api-key
