@@ -23,4 +23,4 @@ externalSecret:
   key: secret/hindsight
   property: groq-api-key
   accessKeyProperty: ui-access-key
-  apiTokenProperty: api-access-key
+  apiAccessKeyProperty: api-access-key
