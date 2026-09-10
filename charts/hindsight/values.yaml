@@ -4,8 +4,9 @@ image:
   pullPolicy: IfNotPresent
 
 llm:
-  provider: groq
-  model: openai/gpt-oss-20b
+  provider: ollama
+  model: gpt-oss:20b
+  baseUrl: http://10.0.60.29:11434/v1
 
 storage:
   storageClass: nfs-fast
