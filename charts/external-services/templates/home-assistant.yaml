@@ -5,7 +5,7 @@ metadata:
   namespace: infra
 spec:
   type: ExternalName
-  externalName: 10.0.40.12
+  externalName: 10.0.40.14
   ports:
     - name: http
       port: 8123
