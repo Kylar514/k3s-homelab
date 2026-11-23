@@ -10,11 +10,11 @@ spec:
     - name: services
       rules:
         - alert: ServiceDown
-          expr: probe_success{job="blackbox"} == 0
+          expr: probe_success{job="blackbox", via!="ping"} == 0
           for: 5m
           labels: { severity: critical }
           annotations:
-            summary: '{{ "{{ $labels.service }}" }} is down ({{ "{{ $labels.via }}" }})'
+            summary: '{{ "{{ $labels.name }}" }} ({{ "{{ $labels.location }}" }}) is down via {{ "{{ $labels.via }}" }}'
             description: '{{ "{{ $labels.instance }}" }} failing. via=traefik only = Traefik/DNS issue; via=direct = the app itself.'
     - name: storage
       rules:
@@ -48,9 +48,9 @@ spec:
     - name: proxmox
       rules:
         - alert: VMStopped
-          # 9xxx are templates (VMID convention), always stopped
-          expr: pve_up{id=~"qemu/.*", id!~"qemu/9..."} == 0
+          # only guests set to start at boot are supposed to be running
+          expr: pve_up{id=~"qemu/.*|lxc/.*"} == 0 and on(id) pve_onboot_status == 1
           for: 5m
           labels: { severity: warning }
           annotations:
-            summary: 'VM {{ "{{ $labels.id }}" }} is not running'
+            summary: 'VM {{ "{{ $labels.id }}" }} is stopped but set to start at boot'

@@ -1,0 +1,114 @@
+# Every few minutes: list IngressRoutes, Services, nasus containers and Proxmox
+# guests, and write the probe targets to ConfigMap probe-targets (mounted into
+# Prometheus as file_sd). New services show up on the dashboard on their own.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: probe-discovery-scripts
+  namespace: monitoring
+data:
+  discover.sh: |-
+{{ .Files.Get "files/discover.sh" | indent 4 }}
+  targets.jq: |-
+{{ .Files.Get "files/targets.jq" | indent 4 }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: probe-discovery
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: probe-discovery
+rules:
+  - apiGroups: ['']
+    resources: [services, pods]
+    verbs: [get, list]
+  - apiGroups: [traefik.io]
+    resources: [ingressroutes]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: probe-discovery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: probe-discovery
+subjects:
+  - kind: ServiceAccount
+    name: probe-discovery
+    namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: probe-discovery
+  namespace: monitoring
+rules:
+  - apiGroups: ['']
+    resources: [configmaps]
+    resourceNames: [probe-targets]
+    verbs: [get, patch, update]
+  - apiGroups: ['']
+    resources: [configmaps]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: probe-discovery
+  namespace: monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: probe-discovery
+subjects:
+  - kind: ServiceAccount
+    name: probe-discovery
+    namespace: monitoring
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: probe-discovery
+  namespace: monitoring
+spec:
+  schedule: {{ .Values.discovery.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 240
+      template:
+        spec:
+          serviceAccountName: probe-discovery
+          restartPolicy: Never
+          containers:
+            - name: discover
+              image: {{ .Values.discovery.image }}
+              command: [sh, /scripts/discover.sh]
+              env:
+                - { name: NAMESPACE, value: monitoring }
+                - { name: PROM_URL, value: 'http://kps-prometheus.monitoring.svc:9090' }
+                - { name: PVE_URL, value: {{ .Values.discovery.pveUrl | quote }} }
+                - { name: PVE_USER, value: {{ (index .Values "prometheus-pve-exporter").env.pveUser | quote }} }
+                - name: PVE_TOKEN_NAME
+                  valueFrom: { secretKeyRef: { name: pve-exporter-auth, key: tokenName } }
+                - name: PVE_TOKEN_VALUE
+                  valueFrom: { secretKeyRef: { name: pve-exporter-auth, key: tokenValue } }
+                - { name: NASUS_IPS, value: {{ .Values.discovery.nasusIPs | toJson | quote }} }
+                - { name: EXTRA_PROBES, value: {{ .Values.extraProbes | toJson | quote }} }
+              volumeMounts:
+                - { name: scripts, mountPath: /scripts }
+              resources:
+                requests: { cpu: 10m, memory: 32Mi }
+                limits: { memory: 256Mi }
+          volumes:
+            - name: scripts
+              configMap: { name: probe-discovery-scripts }

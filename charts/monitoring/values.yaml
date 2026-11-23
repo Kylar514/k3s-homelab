@@ -1,35 +1,34 @@
-# Uptime checks. Each service is probed twice:
-#   public   -> through Traefik (DNS + TLS + routing + app)
-#   internal -> straight at the app (skips Traefik), optional
-# public down + internal up = Traefik/DNS problem. Both down = app is down.
-# When a service migrates into k8s, point `internal` at its cluster Service.
-probes:
-  - { name: argocd, public: https://argocd.thenasus.com, internal: http://argocd-server.argocd.svc }
-  - { name: adguard, public: https://adguard.thenasus.com, internal: http://10.0.40.3:85 }
-  - { name: home-assistant, public: https://home.thenasus.com, internal: http://10.0.40.14:8123 }
-  - { name: wled-bookshelf, public: https://bookshelf.thenasus.com, internal: http://10.0.60.30 }
-  - { name: hindsight, public: https://hindsight.thenasus.com, internal: http://hindsight.apps.svc:9999 }
-  - { name: it-tools, public: https://it-tools.thenasus.com, internal: http://it-tools.tools.svc }
-  - { name: omni-tools, public: https://omni.thenasus.com, internal: http://omni.tools.svc }
-  - { name: vaultwarden, public: https://vault.thenasus.com, internal: http://vaultwarden.apps.svc }
-  - { name: grafana, public: https://grafana.thenasus.com, internal: http://grafana.monitoring.svc }
-  # Still on nasus behind the docker Traefik
-  - { name: cloud, public: https://cloud.thenasus.com, internal: http://10.0.40.5:8585 }
-  - { name: dash, public: https://dash.thenasus.com, internal: http://10.0.40.5:3001 }
-  - { name: dockhands, public: https://dockhands.thenasus.com, internal: http://10.0.40.5:3009 }
-  - { name: homarr, public: https://homarr.thenasus.com, internal: http://10.0.40.5:7576 }
-  - { name: jellyfin, public: https://jellyfin.thenasus.com, internal: http://10.0.40.5:8096 }
-  - { name: prowlarr, public: https://prowlarr.thenasus.com, internal: http://10.0.40.5:9696 }
-  - { name: radarr, public: https://radarr.thenasus.com, internal: http://10.0.40.5:7878 }
-  - { name: readarr, public: https://readarr.thenasus.com, internal: http://10.0.40.5:8787 }
-  - { name: seerr, public: https://seerr.thenasus.com, internal: http://10.0.40.5:5055 }
-  - { name: sonarr, public: https://sonarr.thenasus.com, internal: http://10.0.40.5:8989 }
-  - { name: proxmox, public: https://proxmox.thenasus.com, internal: https://10.0.40.7:8006 }
-  # no direct check: k3s can't reach 10.0.10.1
-  - { name: udm, public: https://udm.thenasus.com }
+# Uptime checks are discovered automatically every 5 min (templates/discovery.yaml):
+#   traefik -> HTTPS to every Host() in every IngressRoute
+#   direct  -> TCP connect to every k8s Service port and every published nasus port
+#   ping    -> every Proxmox guest with a known IP
+# traefik down + direct up = Traefik/DNS problem. Both down = the app is down.
+discovery:
+  schedule: '*/5 * * * *'
+  image: alpine/k8s:1.32.13
+  pveUrl: https://10.0.40.7:8006
+  # first one is used for direct checks of published container ports
+  nasusIPs: [10.0.40.5, 10.0.40.3]
+
+# Routes the discovery can't see: the docker Traefik on nasus (going away) and
+# non-container hosts. `name` must match the `docker ps` name to share a row.
+# Delete an entry once its route lives in k3s (external-services or a chart).
+extraProbes:
+  - { name: cloud, public: https://cloud.thenasus.com }
+  - { name: dash, public: https://dash.thenasus.com }
+  - { name: dockhand, public: https://dockhands.thenasus.com }
+  - { name: homarr, public: https://homarr.thenasus.com }
+  - { name: jellyfin, public: https://jellyfin.thenasus.com }
+  - { name: prowlarr, public: https://prowlarr.thenasus.com }
+  - { name: radarr, public: https://radarr.thenasus.com }
+  - { name: readarr, public: https://readarr.thenasus.com }
+  - { name: seerr, public: https://seerr.thenasus.com }
+  - { name: sonarr, public: https://sonarr.thenasus.com }
+  - { name: proxmox, public: https://proxmox.thenasus.com, location: pve }
+  - { name: udm, public: https://udm.thenasus.com, location: udm }
 
 dnsProbes:
-  - { name: adguard-dns, target: '10.0.40.3:53' }
+  - { name: adguard, target: '10.0.40.3:53' }
 
 # Hosts outside k8s running exporters (docker-services/infra/monitoring-agent)
 externalHosts:
@@ -62,6 +61,12 @@ kube-prometheus-stack:
     prometheusSpec:
       retention: 15d
       retentionSize: 18GB
+      # probe targets from the discovery CronJob; optional so Prometheus starts before the first run
+      volumes:
+        - name: probe-targets
+          configMap: { name: probe-targets, optional: true }
+      volumeMounts:
+        - { name: probe-targets, mountPath: /etc/prometheus/probe-targets }
       # pick up every ServiceMonitor/PodMonitor/Probe/ScrapeConfig/Rule, not just ones labelled for this release
       serviceMonitorSelectorNilUsesHelmValues: false
       podMonitorSelectorNilUsesHelmValues: false
@@ -135,6 +140,18 @@ prometheus-blackbox-exporter:
           transport_protocol: udp
           query_name: google.com
           query_type: A
+      tcp:
+        prober: tcp
+        timeout: 5s
+        tcp: { preferred_ip_protocol: ip4 }
+      icmp:
+        prober: icmp
+        timeout: 5s
+        icmp: { preferred_ip_protocol: ip4 }
+  # lets the non-root exporter ping without NET_RAW
+  podSecurityContext:
+    sysctls:
+      - { name: net.ipv4.ping_group_range, value: '0 2147483647' }
 
 loki:
   fullnameOverride: loki

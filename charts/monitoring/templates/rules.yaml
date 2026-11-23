@@ -1,0 +1,39 @@
+# One "app" view across k3s containers and nasus docker containers, keyed by
+# {name, location}, for the Apps table. location = nasus | k3s/<namespace> | <vm>.
+{{- define "monitoring.k3s" -}}
+label_replace(label_replace({{ . }}, "name", "$1", "container", "(.*)"), "location", "k3s/$1", "namespace", "(.*)")
+{{- end }}
+{{- define "monitoring.docker" -}}
+label_replace({{ . }}, "location", "$1", "instance", "(.*)")
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-apps
+  namespace: monitoring
+spec:
+  groups:
+    - name: homelab-apps
+      rules:
+        # ip / ports / hosts labels come from the discovered direct probes
+        - record: homelab:app_info
+          expr: |
+            max by (name, location, ip, ports, hosts) (probe_success{job="blackbox", via="direct"}) * 0 + 1
+            or on (name, location)
+            max by (name, location, hosts) (label_replace(probe_success{job="blackbox", via="traefik"}, "hosts", "$1", "host", "(.*)")) * 0 + 1
+            or on (name, location)
+            max by (name, location) ({{ include "monitoring.docker" "docker_container_info" }}) * 0 + 1
+            or on (name, location)
+            max by (name, location) ({{ include "monitoring.k3s" "kube_pod_container_info" }}) * 0 + 1
+        - record: homelab:app_up
+          expr: |
+            max by (name, location) ({{ include "monitoring.docker" "docker_container_info{state=\"running\"}" }})
+            or on (name, location)
+            max by (name, location) ({{ include "monitoring.docker" "docker_container_info" }}) * 0
+            or on (name, location)
+            max by (name, location) ({{ include "monitoring.k3s" "kube_pod_container_status_ready" }})
+        - record: homelab:app_uptime_seconds
+          expr: |
+            time() - max by (name, location) ({{ include "monitoring.docker" "container_start_time_seconds{job=\"cadvisor\", name!=\"\"}" }})
+            or on (name, location)
+            time() - max by (name, location) ({{ include "monitoring.k3s" "kube_pod_container_state_started" }})

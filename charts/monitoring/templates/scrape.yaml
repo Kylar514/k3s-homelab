@@ -9,26 +9,22 @@ relabelings:
   - targetLabel: job
     replacement: blackbox
 {{- end }}
+{{- /* targets written by the probe-discovery CronJob (templates/discovery.yaml) */}}
+{{- range $file, $module := dict "http" "http_up" "tcp" "tcp" "icmp" "icmp" }}
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: ScrapeConfig
 metadata:
-  name: probes-http
+  name: probes-{{ $file }}
   namespace: monitoring
 spec:
   metricsPath: /probe
   params:
-    module: [http_up]
-  staticConfigs:
-    {{- range .Values.probes }}
-    - targets: [{{ .public | quote }}]
-      labels: { service: {{ .name | quote }}, via: traefik }
-    {{- if .internal }}
-    - targets: [{{ .internal | quote }}]
-      labels: { service: {{ .name | quote }}, via: direct }
-    {{- end }}
-    {{- end }}
-  {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
+    module: [{{ $module }}]
+  fileSDConfigs:
+    - files: [/etc/prometheus/probe-targets/{{ $file }}.json]
+  {{- include "monitoring.blackboxRelabel" $ | nindent 2 }}
 ---
+{{- end }}
 apiVersion: monitoring.coreos.com/v1alpha1
 kind: ScrapeConfig
 metadata:
@@ -41,7 +37,7 @@ spec:
   staticConfigs:
     {{- range .Values.dnsProbes }}
     - targets: [{{ .target | quote }}]
-      labels: { service: {{ .name | quote }}, via: direct }
+      labels: { name: {{ .name | quote }}, location: {{ .location | default "nasus" | quote }}, via: dns }
     {{- end }}
   {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
 {{- range $job, $port := dict "node-exporter" 9100 "cadvisor" 9338 "smartctl" 9633 }}
