@@ -22,8 +22,10 @@ spec:
     {{- range .Values.probes }}
     - targets: [{{ .public | quote }}]
       labels: { service: {{ .name | quote }}, via: traefik }
+    {{- if .internal }}
     - targets: [{{ .internal | quote }}]
       labels: { service: {{ .name | quote }}, via: direct }
+    {{- end }}
     {{- end }}
   {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
 ---
@@ -39,7 +41,7 @@ spec:
   staticConfigs:
     {{- range .Values.dnsProbes }}
     - targets: [{{ .target | quote }}]
-      labels: { service: {{ .name | quote }}, via: dns }
+      labels: { service: {{ .name | quote }}, via: direct }
     {{- end }}
   {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
 {{- range $job, $port := dict "node-exporter" 9100 "cadvisor" 9338 "smartctl" 9633 }}

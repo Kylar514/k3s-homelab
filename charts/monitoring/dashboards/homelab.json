@@ -7,26 +7,74 @@
   "schemaVersion": 39,
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
+    { "type": "row", "title": "Summary", "collapsed": false, "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "panels": [] },
     {
-      "type": "table",
-      "title": "Services (traefik = via Traefik, direct = straight to app)",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 20 },
+      "type": "stat",
+      "title": "Services down",
+      "gridPos": { "x": 0, "y": 1, "w": 5, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "max by (service, via) (probe_success{job=\"blackbox\"})", "instant": true, "format": "table" }
-      ],
-      "transformations": [
-        { "id": "groupingToMatrix", "options": { "columnField": "via", "rowField": "service", "valueField": "Value" } }
-      ],
+      "targets": [ { "refId": "A", "expr": "count(max by (service, via) (probe_success{job=\"blackbox\"}) == 0) or vector(0)", "instant": true } ],
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } }
+    },
+    {
+      "type": "stat",
+      "title": "VMs stopped",
+      "gridPos": { "x": 5, "y": 1, "w": 5, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "count(pve_up{id=~\"qemu/.*\", id!~\"qemu/9...\"} == 0) or vector(0)", "instant": true } ],
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } }
+    },
+    {
+      "type": "stat",
+      "title": "RAID md0",
+      "gridPos": { "x": 10, "y": 1, "w": 5, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "(max(node_md_state{instance=\"nasus\", device=\"md0\", state=\"active\"}) * (sum(node_md_disks{instance=\"nasus\", device=\"md0\", state=\"failed\"}) == 0)) or vector(0)", "instant": true } ],
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "fieldConfig": {
         "defaults": {
-          "mappings": [
-            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
-          ],
-          "custom": { "cellOptions": { "type": "color-background" }, "align": "center" }
+          "mappings": [ { "type": "value", "options": { "0": { "text": "DEGRADED", "color": "red" }, "1": { "text": "HEALTHY", "color": "green" } } } ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Array free",
+      "gridPos": { "x": 15, "y": 1, "w": 5, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "node_filesystem_avail_bytes{instance=\"nasus\", mountpoint=\"/home/zeal/data\"}", "instant": true } ],
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "bytes", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "blue" } } }
+    },
+    {
+      "type": "stat",
+      "title": "Alerts firing",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "count(ALERTS{alertstate=\"firing\", alertname!~\"Watchdog|InfoInhibitor\"}) or vector(0)", "instant": true } ],
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] } } }
+    },
+
+    { "type": "row", "title": "Services", "collapsed": false, "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "type": "table",
+      "title": "Services (traefik = through Traefik, direct = straight to the app)",
+      "gridPos": { "x": 0, "y": 6, "w": 14, "h": 17 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "max by (service, via) (probe_success{job=\"blackbox\"})", "instant": true, "format": "table" } ],
+      "transformations": [ { "id": "groupingToMatrix", "options": { "columnField": "via", "rowField": "service", "valueField": "Value" } } ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ],
+          "custom": { "cellOptions": { "type": "color-background" }, "align": "center" },
+          "noValue": "-"
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "service\\via" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "auto" } }, { "id": "displayName", "value": "service" } ] }
+          { "matcher": { "id": "byName", "options": "service\\via" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "auto" } }, { "id": "displayName", "value": "service" }, { "id": "custom.align", "value": "left" } ] }
         ]
       },
       "options": { "sortBy": [ { "displayName": "service" } ] }
@@ -34,74 +82,70 @@
     {
       "type": "table",
       "title": "Proxmox VMs",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 7 },
+      "gridPos": { "x": 14, "y": 6, "w": 10, "h": 17 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "pve_up{id=~\"qemu/.*\"} * on(id) group_left(name) pve_guest_info", "instant": true, "format": "table" }
-      ],
+      "targets": [ { "refId": "A", "expr": "pve_up{id=~\"qemu/.*\", id!~\"qemu/9...\"} * on(id) group_left(name) pve_guest_info", "instant": true, "format": "table" } ],
       "transformations": [
-        { "id": "organize", "options": { "includeByName": { "name": true, "id": true, "Value": true }, "renameByName": { "Value": "state" } } }
+        { "id": "organize", "options": { "includeByName": { "name": true, "id": true, "Value": true }, "indexByName": { "name": 0, "id": 1, "Value": 2 }, "renameByName": { "Value": "state" } } }
       ],
       "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            { "type": "value", "options": { "0": { "text": "STOPPED", "color": "red" }, "1": { "text": "RUNNING", "color": "green" } } }
-          ]
-        },
+        "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "STOPPED", "color": "red" }, "1": { "text": "RUNNING", "color": "green" } } } ] },
+        "overrides": [ { "matcher": { "id": "byName", "options": "state" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "custom.align", "value": "center" } ] } ]
+      },
+      "options": { "sortBy": [ { "displayName": "name" } ] }
+    },
+
+    { "type": "row", "title": "nasus storage", "collapsed": false, "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 }, "panels": [] },
+    {
+      "type": "table",
+      "title": "Filesystems",
+      "gridPos": { "x": 0, "y": 24, "w": 14, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "node_filesystem_size_bytes{instance=\"nasus\", fstype=~\"ext4|xfs|btrfs\", mountpoint!~\"/boot.*\"}", "instant": true, "format": "table" },
+        { "refId": "B", "expr": "node_filesystem_avail_bytes{instance=\"nasus\", fstype=~\"ext4|xfs|btrfs\", mountpoint!~\"/boot.*\"}", "instant": true, "format": "table" },
+        { "refId": "C", "expr": "1 - node_filesystem_avail_bytes{instance=\"nasus\", fstype=~\"ext4|xfs|btrfs\", mountpoint!~\"/boot.*\"} / node_filesystem_size_bytes", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "mountpoint", "mode": "outer" } },
+        { "id": "organize", "options": {
+            "includeByName": { "mountpoint": true, "Value #A": true, "Value #B": true, "Value #C": true },
+            "indexByName": { "mountpoint": 0, "Value #A": 1, "Value #B": 2, "Value #C": 3 },
+            "renameByName": { "Value #A": "size", "Value #B": "free", "Value #C": "used" } } }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "decimals": 1 },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "state" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+          { "matcher": { "id": "byName", "options": "used" }, "properties": [
+            { "id": "unit", "value": "percentunit" }, { "id": "min", "value": 0 }, { "id": "max", "value": 1 },
+            { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "gradient" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.85 }, { "color": "red", "value": 0.95 } ] } } ] }
         ]
-      }
+      },
+      "options": { "sortBy": [ { "displayName": "size", "desc": true } ] }
     },
     {
       "type": "stat",
-      "title": "nasus RAID (md0)",
-      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 4 },
+      "title": "md0 disks",
+      "gridPos": { "x": 14, "y": 24, "w": 5, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "refId": "A", "expr": "node_md_state{instance=\"nasus\"} == 1", "legendFormat": "{{device}} state: {{state}}", "instant": true },
-        { "refId": "B", "expr": "node_md_disks{instance=\"nasus\", state=\"active\"}", "legendFormat": "{{device}} active disks", "instant": true },
-        { "refId": "C", "expr": "node_md_disks{instance=\"nasus\", state=\"failed\"}", "legendFormat": "{{device}} failed disks", "instant": true }
+        { "refId": "A", "expr": "node_md_disks{instance=\"nasus\", device=\"md0\", state=\"active\"}", "legendFormat": "active", "instant": true },
+        { "refId": "B", "expr": "node_md_disks_required{instance=\"nasus\", device=\"md0\"}", "legendFormat": "required", "instant": true },
+        { "refId": "C", "expr": "node_md_disks{instance=\"nasus\", device=\"md0\", state=\"failed\"}", "legendFormat": "failed", "instant": true }
       ],
-      "options": { "textMode": "value_and_name", "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "options": { "textMode": "value_and_name", "colorMode": "value", "graphMode": "none", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } },
       "fieldConfig": {
-        "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } },
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "text" } },
         "overrides": [
           { "matcher": { "id": "byFrameRefID", "options": "C" }, "properties": [ { "id": "color", "value": { "mode": "thresholds" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } ] }
         ]
       }
     },
     {
-      "type": "bargauge",
-      "title": "nasus disk used",
-      "gridPos": { "x": 12, "y": 11, "w": 6, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "1 - node_filesystem_avail_bytes{instance=\"nasus\", fstype!~\"tmpfs|squashfs|overlay|vfat\"} / node_filesystem_size_bytes", "legendFormat": "{{mountpoint}}", "instant": true }
-      ],
-      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit", "min": 0, "max": 1,
-          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.85 }, { "color": "red", "value": 0.95 } ] }
-        }
-      }
-    },
-    {
-      "type": "stat",
-      "title": "nasus free space",
-      "gridPos": { "x": 18, "y": 11, "w": 6, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "node_filesystem_avail_bytes{instance=\"nasus\", fstype!~\"tmpfs|squashfs|overlay|vfat\"}", "legendFormat": "{{mountpoint}}", "instant": true }
-      ],
-      "options": { "textMode": "value_and_name", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "blue" } } }
-    },
-    {
       "type": "table",
-      "title": "nasus disks (SMART)",
-      "gridPos": { "x": 0, "y": 20, "w": 8, "h": 8 },
+      "title": "Disk health (SMART)",
+      "gridPos": { "x": 19, "y": 24, "w": 5, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         { "refId": "A", "expr": "smartctl_device_smart_status{instance=\"nasus\"}", "instant": true, "format": "table" },
@@ -109,52 +153,62 @@
       ],
       "transformations": [
         { "id": "joinByField", "options": { "byField": "device", "mode": "outer" } },
-        { "id": "organize", "options": { "includeByName": { "device": true, "Value #A": true, "Value #B": true }, "renameByName": { "Value #A": "health", "Value #B": "temp °C" } } }
+        { "id": "organize", "options": { "includeByName": { "device": true, "Value #A": true, "Value #B": true }, "indexByName": { "device": 0, "Value #A": 1, "Value #B": 2 }, "renameByName": { "Value #A": "health", "Value #B": "°C" } } }
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           { "matcher": { "id": "byName", "options": "health" }, "properties": [
             { "id": "mappings", "value": [ { "type": "value", "options": { "0": { "text": "FAILING", "color": "red" }, "1": { "text": "OK", "color": "green" } } } ] },
-            { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } }, { "id": "custom.align", "value": "center" } ] }
         ]
       }
     },
+
     {
-      "type": "table",
-      "title": "nasus containers (uptime)",
-      "gridPos": { "x": 8, "y": 20, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "time() - max by (name) (container_start_time_seconds{instance=\"nasus\", name!=\"\"})", "instant": true, "format": "table" }
-      ],
-      "transformations": [
-        { "id": "organize", "options": { "includeByName": { "name": true, "Value": true }, "renameByName": { "Value": "uptime" } } }
-      ],
-      "fieldConfig": { "defaults": { "unit": "s" } },
-      "options": { "sortBy": [ { "displayName": "name" } ] }
-    },
-    {
-      "type": "table",
-      "title": "k8s pods not running",
-      "gridPos": { "x": 16, "y": 20, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        { "refId": "A", "expr": "sum by (namespace, pod, phase) (kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\"}) > 0", "instant": true, "format": "table" }
-      ],
-      "transformations": [
-        { "id": "organize", "options": { "includeByName": { "namespace": true, "pod": true, "phase": true } } }
+      "type": "row", "title": "Workloads", "collapsed": true, "gridPos": { "x": 0, "y": 32, "w": 24, "h": 1 },
+      "panels": [
+        {
+          "type": "table",
+          "title": "nasus containers (orange = restarted in the last hour)",
+          "gridPos": { "x": 0, "y": 33, "w": 12, "h": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "time() - max by (name) (container_start_time_seconds{instance=\"nasus\", name!=\"\"})", "instant": true, "format": "table" } ],
+          "transformations": [ { "id": "organize", "options": { "includeByName": { "name": true, "Value": true }, "renameByName": { "Value": "uptime" } } } ],
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "uptime" }, "properties": [
+                { "id": "unit", "value": "s" },
+                { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+                { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "orange", "value": null }, { "color": "green", "value": 3600 } ] } } ] }
+            ]
+          },
+          "options": { "sortBy": [ { "displayName": "name" } ] }
+        },
+        {
+          "type": "table",
+          "title": "k3s pods not running (empty = all good)",
+          "gridPos": { "x": 12, "y": 33, "w": 12, "h": 12 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [ { "refId": "A", "expr": "sum by (namespace, pod, phase) (kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\"}) > 0", "instant": true, "format": "table" } ],
+          "transformations": [ { "id": "organize", "options": { "includeByName": { "namespace": true, "pod": true, "phase": true } } } ]
+        }
       ]
     },
+
     {
-      "type": "logs",
-      "title": "Errors across everything (edit the query or open in Explore)",
-      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 12 },
-      "datasource": { "type": "loki", "uid": "loki" },
-      "targets": [
-        { "refId": "A", "expr": "{host=~\".+\"} |~ \"(?i)\\\\b(error|fatal|panic|exception)\\\\b\"" }
-      ],
-      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" }
+      "type": "row", "title": "Logs", "collapsed": true, "gridPos": { "x": 0, "y": 33, "w": 24, "h": 1 },
+      "panels": [
+        {
+          "type": "logs",
+          "title": "Errors across everything (open in Explore to dig in)",
+          "gridPos": { "x": 0, "y": 34, "w": 24, "h": 14 },
+          "datasource": { "type": "loki", "uid": "loki" },
+          "targets": [ { "refId": "A", "expr": "{host=~\".+\", container!=\"blackbox-exporter\"} |~ \"(?i)\\\\b(error|fatal|panic|exception)\\\\b\"" } ],
+          "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" }
+        }
+      ]
     }
   ]
 }

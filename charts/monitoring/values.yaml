@@ -1,40 +1,35 @@
 # Uptime checks. Each service is probed twice:
 #   public   -> through Traefik (DNS + TLS + routing + app)
-#   internal -> straight at the app (skips Traefik)
+#   internal -> straight at the app (skips Traefik), optional
 # public down + internal up = Traefik/DNS problem. Both down = app is down.
 # When a service migrates into k8s, point `internal` at its cluster Service.
 probes:
   - { name: argocd, public: https://argocd.thenasus.com, internal: http://argocd-server.argocd.svc }
   - { name: adguard, public: https://adguard.thenasus.com, internal: http://10.0.40.3:85 }
-  - { name: adguard2, public: https://adguard2.thenasus.com, internal: http://10.0.40.3:80 }
   - { name: home-assistant, public: https://home.thenasus.com, internal: http://10.0.40.14:8123 }
   - { name: wled-bookshelf, public: https://bookshelf.thenasus.com, internal: http://10.0.60.30 }
   - { name: hindsight, public: https://hindsight.thenasus.com, internal: http://hindsight.apps.svc:9999 }
   - { name: it-tools, public: https://it-tools.thenasus.com, internal: http://it-tools.tools.svc }
   - { name: omni-tools, public: https://omni.thenasus.com, internal: http://omni.tools.svc }
-  - { name: qbittorrent, public: https://torrent.thenasus.com, internal: http://qbittorrent.media.svc:8080 }
   - { name: vaultwarden, public: https://vault.thenasus.com, internal: http://vaultwarden.apps.svc }
   - { name: grafana, public: https://grafana.thenasus.com, internal: http://grafana.monitoring.svc }
   # Still on nasus behind the docker Traefik
   - { name: cloud, public: https://cloud.thenasus.com, internal: http://10.0.40.5:8585 }
   - { name: dash, public: https://dash.thenasus.com, internal: http://10.0.40.5:3001 }
   - { name: dockhands, public: https://dockhands.thenasus.com, internal: http://10.0.40.5:3009 }
-  - { name: fivefingers, public: https://fivefingers.thenasus.com, internal: http://10.0.40.5:8091 }
-  - { name: freshrss, public: https://freshrss.thenasus.com, internal: http://10.0.40.5:8090 }
   - { name: homarr, public: https://homarr.thenasus.com, internal: http://10.0.40.5:7576 }
   - { name: jellyfin, public: https://jellyfin.thenasus.com, internal: http://10.0.40.5:8096 }
-  - { name: netboot, public: https://netboot.thenasus.com, internal: http://10.0.40.5:3000 }
-  - { name: ownfoil, public: https://ownfoil.thenasus.com, internal: http://10.0.40.5:8000 }
   - { name: prowlarr, public: https://prowlarr.thenasus.com, internal: http://10.0.40.5:9696 }
   - { name: radarr, public: https://radarr.thenasus.com, internal: http://10.0.40.5:7878 }
   - { name: readarr, public: https://readarr.thenasus.com, internal: http://10.0.40.5:8787 }
   - { name: seerr, public: https://seerr.thenasus.com, internal: http://10.0.40.5:5055 }
   - { name: sonarr, public: https://sonarr.thenasus.com, internal: http://10.0.40.5:8989 }
   - { name: proxmox, public: https://proxmox.thenasus.com, internal: https://10.0.40.7:8006 }
-  - { name: udm, public: https://udm.thenasus.com, internal: https://10.0.10.1 }
+  # no direct check: k3s can't reach 10.0.10.1
+  - { name: udm, public: https://udm.thenasus.com }
 
 dnsProbes:
-  - { name: adguard, target: '10.0.40.3:53' }
+  - { name: adguard-dns, target: '10.0.40.3:53' }
 
 # Hosts outside k8s running exporters (docker-services/infra/monitoring-agent)
 externalHosts:
