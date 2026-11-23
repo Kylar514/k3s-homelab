@@ -1,0 +1,56 @@
+# Crash loops, scrape targets down, and k8s node issues are covered by
+# kube-prometheus-stack's default rules. These are the homelab-specific ones.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab
+  namespace: monitoring
+spec:
+  groups:
+    - name: services
+      rules:
+        - alert: ServiceDown
+          expr: probe_success{job="blackbox"} == 0
+          for: 5m
+          labels: { severity: critical }
+          annotations:
+            summary: '{{ "{{ $labels.service }}" }} is down ({{ "{{ $labels.via }}" }})'
+            description: '{{ "{{ $labels.instance }}" }} failing. via=traefik only = Traefik/DNS issue; via=direct = the app itself.'
+    - name: storage
+      rules:
+        - alert: RaidDegraded
+          expr: node_md_disks_required - on(instance, device) node_md_disks{state="active"} > 0
+          for: 1m
+          labels: { severity: critical }
+          annotations:
+            summary: '{{ "{{ $labels.device }}" }} on {{ "{{ $labels.instance }}" }} is degraded - one more disk failure loses data'
+        - alert: RaidRebuilding
+          expr: node_md_state{state=~"recovering|resync|check"} == 1
+          labels: { severity: info }
+          annotations:
+            summary: '{{ "{{ $labels.device }}" }} on {{ "{{ $labels.instance }}" }} is {{ "{{ $labels.state }}" }}'
+        - alert: DiskSmartFailing
+          expr: smartctl_device_smart_status == 0
+          labels: { severity: critical }
+          annotations:
+            summary: '{{ "{{ $labels.device }}" }} on {{ "{{ $labels.instance }}" }} fails SMART health check'
+        - alert: DiskSectorsReallocating
+          expr: increase(smartctl_device_attribute{attribute_name=~"Reallocated_Sector_Ct|Current_Pending_Sector|Offline_Uncorrectable", attribute_value_type="raw"}[1d]) > 0
+          labels: { severity: warning }
+          annotations:
+            summary: '{{ "{{ $labels.device }}" }} on {{ "{{ $labels.instance }}" }}: {{ "{{ $labels.attribute_name }}" }} rising - disk is wearing out'
+        - alert: FilesystemFull
+          expr: 1 - node_filesystem_avail_bytes{fstype!~"tmpfs|squashfs|overlay"} / node_filesystem_size_bytes > 0.85
+          for: 15m
+          labels: { severity: warning }
+          annotations:
+            summary: '{{ "{{ $labels.mountpoint }}" }} on {{ "{{ $labels.instance }}" }} is {{ "{{ $value | humanizePercentage }}" }} full'
+    - name: proxmox
+      rules:
+        - alert: VMStopped
+          # 9xxx are templates (VMID convention), always stopped
+          expr: pve_up{id=~"qemu/.*", id!~"qemu/9..."} == 0
+          for: 5m
+          labels: { severity: warning }
+          annotations:
+            summary: 'VM {{ "{{ $labels.id }}" }} is not running'

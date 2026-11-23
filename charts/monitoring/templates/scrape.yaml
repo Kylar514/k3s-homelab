@@ -1,0 +1,80 @@
+{{- define "monitoring.blackboxRelabel" -}}
+relabelings:
+  - sourceLabels: [__address__]
+    targetLabel: __param_target
+  - sourceLabels: [__param_target]
+    targetLabel: instance
+  - targetLabel: __address__
+    replacement: blackbox-exporter.monitoring.svc:9115
+  - targetLabel: job
+    replacement: blackbox
+{{- end }}
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: probes-http
+  namespace: monitoring
+spec:
+  metricsPath: /probe
+  params:
+    module: [http_up]
+  staticConfigs:
+    {{- range .Values.probes }}
+    - targets: [{{ .public | quote }}]
+      labels: { service: {{ .name | quote }}, via: traefik }
+    - targets: [{{ .internal | quote }}]
+      labels: { service: {{ .name | quote }}, via: direct }
+    {{- end }}
+  {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: probes-dns
+  namespace: monitoring
+spec:
+  metricsPath: /probe
+  params:
+    module: [dns]
+  staticConfigs:
+    {{- range .Values.dnsProbes }}
+    - targets: [{{ .target | quote }}]
+      labels: { service: {{ .name | quote }}, via: dns }
+    {{- end }}
+  {{- include "monitoring.blackboxRelabel" . | nindent 2 }}
+{{- range $job, $port := dict "node-exporter" 9100 "cadvisor" 9338 "smartctl" 9633 }}
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: external-{{ $job }}
+  namespace: monitoring
+spec:
+  staticConfigs:
+    {{- range $.Values.externalHosts }}
+    - targets: ['{{ .address }}:{{ $port }}']
+      labels: { host: {{ .name | quote }} }
+    {{- end }}
+  relabelings:
+    # instance=nasus instead of an IP, so dashboards read nicely
+    - sourceLabels: [host]
+      targetLabel: instance
+    # job=node-exporter makes nasus show up in the stock node dashboards
+    - targetLabel: job
+      replacement: {{ $job }}
+{{- end }}
+---
+# k3s Traefik's built-in metrics endpoint
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: traefik
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [kube-system]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: traefik
+  podMetricsEndpoints:
+    - port: metrics

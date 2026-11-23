@@ -1,0 +1,238 @@
+# Uptime checks. Each service is probed twice:
+#   public   -> through Traefik (DNS + TLS + routing + app)
+#   internal -> straight at the app (skips Traefik)
+# public down + internal up = Traefik/DNS problem. Both down = app is down.
+# When a service migrates into k8s, point `internal` at its cluster Service.
+probes:
+  - { name: argocd, public: https://argocd.thenasus.com, internal: http://argocd-server.argocd.svc }
+  - { name: adguard, public: https://adguard.thenasus.com, internal: http://10.0.40.3:85 }
+  - { name: adguard2, public: https://adguard2.thenasus.com, internal: http://10.0.40.3:80 }
+  - { name: home-assistant, public: https://home.thenasus.com, internal: http://10.0.40.14:8123 }
+  - { name: wled-bookshelf, public: https://bookshelf.thenasus.com, internal: http://10.0.60.30 }
+  - { name: hindsight, public: https://hindsight.thenasus.com, internal: http://hindsight.apps.svc:9999 }
+  - { name: it-tools, public: https://it-tools.thenasus.com, internal: http://it-tools.tools.svc }
+  - { name: omni-tools, public: https://omni.thenasus.com, internal: http://omni.tools.svc }
+  - { name: qbittorrent, public: https://torrent.thenasus.com, internal: http://qbittorrent.media.svc:8080 }
+  - { name: vaultwarden, public: https://vault.thenasus.com, internal: http://vaultwarden.apps.svc }
+  - { name: grafana, public: https://grafana.thenasus.com, internal: http://grafana.monitoring.svc }
+  # Still on nasus behind the docker Traefik
+  - { name: cloud, public: https://cloud.thenasus.com, internal: http://10.0.40.5:8585 }
+  - { name: dash, public: https://dash.thenasus.com, internal: http://10.0.40.5:3001 }
+  - { name: dockhands, public: https://dockhands.thenasus.com, internal: http://10.0.40.5:3009 }
+  - { name: fivefingers, public: https://fivefingers.thenasus.com, internal: http://10.0.40.5:8091 }
+  - { name: freshrss, public: https://freshrss.thenasus.com, internal: http://10.0.40.5:8090 }
+  - { name: homarr, public: https://homarr.thenasus.com, internal: http://10.0.40.5:7576 }
+  - { name: jellyfin, public: https://jellyfin.thenasus.com, internal: http://10.0.40.5:8096 }
+  - { name: netboot, public: https://netboot.thenasus.com, internal: http://10.0.40.5:3000 }
+  - { name: ownfoil, public: https://ownfoil.thenasus.com, internal: http://10.0.40.5:8000 }
+  - { name: prowlarr, public: https://prowlarr.thenasus.com, internal: http://10.0.40.5:9696 }
+  - { name: radarr, public: https://radarr.thenasus.com, internal: http://10.0.40.5:7878 }
+  - { name: readarr, public: https://readarr.thenasus.com, internal: http://10.0.40.5:8787 }
+  - { name: seerr, public: https://seerr.thenasus.com, internal: http://10.0.40.5:5055 }
+  - { name: sonarr, public: https://sonarr.thenasus.com, internal: http://10.0.40.5:8989 }
+  - { name: proxmox, public: https://proxmox.thenasus.com, internal: https://10.0.40.7:8006 }
+  - { name: udm, public: https://udm.thenasus.com, internal: https://10.0.10.1 }
+
+dnsProbes:
+  - { name: adguard, target: '10.0.40.3:53' }
+
+# Hosts outside k8s running exporters (docker-services/infra/monitoring-agent)
+externalHosts:
+  - name: nasus
+    address: 10.0.40.3
+
+externalSecret:
+  grafanaKey: secret/grafana
+  pveKey: secret/pve-exporter
+
+kube-prometheus-stack:
+  fullnameOverride: kps
+  # k3s embeds these; their endpoints aren't exposed
+  kubeEtcd: { enabled: false }
+  kubeScheduler: { enabled: false }
+  kubeControllerManager: { enabled: false }
+  kubeProxy: { enabled: false }
+  defaultRules:
+    rules:
+      etcd: false
+      kubeSchedulerAlerting: false
+      kubeSchedulerRecording: false
+      kubeControllerManager: false
+      kubeProxy: false
+  prometheusOperator:
+    # Helm-hook based cert jobs fight with ArgoCD
+    admissionWebhooks: { enabled: false }
+    tls: { enabled: false }
+  prometheus:
+    prometheusSpec:
+      retention: 15d
+      retentionSize: 18GB
+      # pick up every ServiceMonitor/PodMonitor/Probe/ScrapeConfig/Rule, not just ones labelled for this release
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+      probeSelectorNilUsesHelmValues: false
+      ruleSelectorNilUsesHelmValues: false
+      scrapeConfigSelectorNilUsesHelmValues: false
+      # TSDB on NFS corrupts; local-path pins the pod to whichever node gets the PV
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes: [ReadWriteOnce]
+            resources: { requests: { storage: 20Gi } }
+  alertmanager:
+    alertmanagerSpec:
+      storage:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes: [ReadWriteOnce]
+            resources: { requests: { storage: 1Gi } }
+  grafana:
+    fullnameOverride: grafana
+    testFramework: { enabled: false }
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      passwordKey: admin-password
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 1Gi
+    additionalDataSources:
+      - name: Loki
+        uid: loki
+        type: loki
+        url: http://loki.monitoring.svc:3100
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: community
+            folder: Community
+            type: file
+            options: { path: /var/lib/grafana/dashboards/community }
+    dashboards:
+      community:
+        node-exporter-full: { gnetId: 1860, revision: 46, datasource: Prometheus }
+        proxmox: { gnetId: 10347, revision: 5, datasource: Prometheus }
+        blackbox: { gnetId: 7587, revision: 3, datasource: Prometheus }
+        cadvisor: { gnetId: 14282, revision: 1, datasource: Prometheus }
+
+prometheus-blackbox-exporter:
+  fullnameOverride: blackbox-exporter
+  config:
+    modules:
+      # "the app answered" - auth walls and redirects count as up
+      http_up:
+        prober: http
+        timeout: 10s
+        http:
+          preferred_ip_protocol: ip4
+          valid_status_codes: [200, 201, 204, 301, 302, 303, 307, 308, 401, 403]
+          follow_redirects: false
+          tls_config: { insecure_skip_verify: true }
+      dns:
+        prober: dns
+        timeout: 5s
+        dns:
+          preferred_ip_protocol: ip4
+          transport_protocol: udp
+          query_name: google.com
+          query_type: A
+
+loki:
+  fullnameOverride: loki
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig: { replication_factor: 1 }
+    storage: { type: filesystem }
+    schemaConfig:
+      configs:
+        - from: '2024-04-01'
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index: { prefix: index_, period: 24h }
+    limits_config:
+      retention_period: 168h
+    compactor:
+      retention_enabled: true
+      delete_request_store: filesystem
+  singleBinary:
+    replicas: 1
+    persistence:
+      storageClass: local-path
+      size: 20Gi
+  backend: { replicas: 0 }
+  read: { replicas: 0 }
+  write: { replicas: 0 }
+  gateway: { enabled: false }
+  chunksCache: { enabled: false }
+  resultsCache: { enabled: false }
+  lokiCanary: { enabled: false }
+  test: { enabled: false }
+
+# Ships k8s pod logs + k8s events to Loki
+alloy:
+  fullnameOverride: alloy
+  controller:
+    type: deployment
+    replicas: 1
+  alloy:
+    configMap:
+      content: |
+        discovery.kubernetes "pods" {
+          role = "pod"
+        }
+
+        discovery.relabel "pods" {
+          targets = discovery.kubernetes.pods.targets
+          rule {
+            source_labels = ["__meta_kubernetes_pod_phase"]
+            regex         = "Succeeded|Failed"
+            action        = "drop"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+          rule {
+            source_labels = ["__meta_kubernetes_pod_node_name"]
+            target_label  = "host"
+          }
+        }
+
+        loki.source.kubernetes "pods" {
+          targets    = discovery.relabel.pods.output
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.source.kubernetes_events "events" {
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint {
+            url = "http://loki.monitoring.svc:3100/loki/api/v1/push"
+          }
+        }
+
+prometheus-pve-exporter:
+  fullnameOverride: pve-exporter
+  env:
+    pveUser: monitoring@pve
+    pveExistingSecretName: pve-exporter-auth
+    pveVerifySsl: false
+  serviceMonitor:
+    enabled: true
+    pveTargets: [10.0.40.7]

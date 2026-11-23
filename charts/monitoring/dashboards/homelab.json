@@ -1,0 +1,160 @@
+{
+  "uid": "homelab-overview",
+  "title": "Homelab overview",
+  "tags": ["homelab"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "table",
+      "title": "Services (traefik = via Traefik, direct = straight to app)",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 20 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "max by (service, via) (probe_success{job=\"blackbox\"})", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "groupingToMatrix", "options": { "columnField": "via", "rowField": "service", "valueField": "Value" } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "custom": { "cellOptions": { "type": "color-background" }, "align": "center" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "service\\via" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "auto" } }, { "id": "displayName", "value": "service" } ] }
+        ]
+      },
+      "options": { "sortBy": [ { "displayName": "service" } ] }
+    },
+    {
+      "type": "table",
+      "title": "Proxmox VMs",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "pve_up{id=~\"qemu/.*\"} * on(id) group_left(name) pve_guest_info", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "includeByName": { "name": true, "id": true, "Value": true }, "renameByName": { "Value": "state" } } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "STOPPED", "color": "red" }, "1": { "text": "RUNNING", "color": "green" } } }
+          ]
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "state" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "stat",
+      "title": "nasus RAID (md0)",
+      "gridPos": { "x": 12, "y": 7, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "node_md_state{instance=\"nasus\"} == 1", "legendFormat": "{{device}} state: {{state}}", "instant": true },
+        { "refId": "B", "expr": "node_md_disks{instance=\"nasus\", state=\"active\"}", "legendFormat": "{{device}} active disks", "instant": true },
+        { "refId": "C", "expr": "node_md_disks{instance=\"nasus\", state=\"failed\"}", "legendFormat": "{{device}} failed disks", "instant": true }
+      ],
+      "options": { "textMode": "value_and_name", "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixed", "fixedColor": "green" } },
+        "overrides": [
+          { "matcher": { "id": "byFrameRefID", "options": "C" }, "properties": [ { "id": "color", "value": { "mode": "thresholds" } }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } ] }
+        ]
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "nasus disk used",
+      "gridPos": { "x": 12, "y": 11, "w": 6, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "1 - node_filesystem_avail_bytes{instance=\"nasus\", fstype!~\"tmpfs|squashfs|overlay|vfat\"} / node_filesystem_size_bytes", "legendFormat": "{{mountpoint}}", "instant": true }
+      ],
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit", "min": 0, "max": 1,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.85 }, { "color": "red", "value": 0.95 } ] }
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "nasus free space",
+      "gridPos": { "x": 18, "y": 11, "w": 6, "h": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "node_filesystem_avail_bytes{instance=\"nasus\", fstype!~\"tmpfs|squashfs|overlay|vfat\"}", "legendFormat": "{{mountpoint}}", "instant": true }
+      ],
+      "options": { "textMode": "value_and_name", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "unit": "bytes", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+    },
+    {
+      "type": "table",
+      "title": "nasus disks (SMART)",
+      "gridPos": { "x": 0, "y": 20, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "smartctl_device_smart_status{instance=\"nasus\"}", "instant": true, "format": "table" },
+        { "refId": "B", "expr": "smartctl_device_temperature{instance=\"nasus\", temperature_type=\"current\"}", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "joinByField", "options": { "byField": "device", "mode": "outer" } },
+        { "id": "organize", "options": { "includeByName": { "device": true, "Value #A": true, "Value #B": true }, "renameByName": { "Value #A": "health", "Value #B": "temp °C" } } }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "health" }, "properties": [
+            { "id": "mappings", "value": [ { "type": "value", "options": { "0": { "text": "FAILING", "color": "red" }, "1": { "text": "OK", "color": "green" } } } ] },
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+        ]
+      }
+    },
+    {
+      "type": "table",
+      "title": "nasus containers (uptime)",
+      "gridPos": { "x": 8, "y": 20, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "time() - max by (name) (container_start_time_seconds{instance=\"nasus\", name!=\"\"})", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "includeByName": { "name": true, "Value": true }, "renameByName": { "Value": "uptime" } } }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "options": { "sortBy": [ { "displayName": "name" } ] }
+    },
+    {
+      "type": "table",
+      "title": "k8s pods not running",
+      "gridPos": { "x": 16, "y": 20, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (namespace, pod, phase) (kube_pod_status_phase{phase=~\"Pending|Failed|Unknown\"}) > 0", "instant": true, "format": "table" }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "includeByName": { "namespace": true, "pod": true, "phase": true } } }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Errors across everything (edit the query or open in Explore)",
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 12 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "refId": "A", "expr": "{host=~\".+\"} |~ \"(?i)\\\\b(error|fatal|panic|exception)\\\\b\"" }
+      ],
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending" }
+    }
+  ]
+}

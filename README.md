@@ -22,6 +22,7 @@ match.
 | `external-secrets` | external-secrets | Syncs secrets from Vault to Kubernetes         |
 | `traefik-config`   | kube-system      | Traefik ACME/Let's Encrypt config, middlewares |
 | `argocd-ingress`   | argocd           | Traefik IngressRoute for ArgoCD UI             |
+| `monitoring`       | monitoring       | Prometheus, Grafana, Loki, Alloy, uptime probes, alerts |
 
 ## Storage Classes
 
